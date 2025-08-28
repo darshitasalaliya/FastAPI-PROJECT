@@ -1,31 +1,63 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-import os
 from dotenv import load_dotenv
+import os
 
-# Load .env file where OPENAI_API_KEY is stored
+# Chatbot Model
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+# LLM 
+from langchain_google_genai import GoogleGenerativeAI
+from langchain.prompts import ChatPromptTemplate
+
+# Load environment variables
 load_dotenv()
 
 app = FastAPI()
 
-# Define request schema
+# Request schema for chatbot
 class QueryRequest(BaseModel):
     query: str
 
-# Setup LangChain LLM
-llm = ChatOpenAI(
-    model="gpt-3.5-turbo",   # you can change to gpt-4
-    temperature=0.7,
-    openai_api_key=os.getenv("OPENAI_API_KEY")
+# Setup Gemini Chatbot LLM
+chatbot = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash",   # or "gemini-1.5-pro"
+    google_api_key=os.getenv("GEMINI_API_KEY"),
+    temperature=0.7
 )
 
-# Create a simple prompt template
-prompt = ChatPromptTemplate.from_template("You are a helpful assistant. Answer the following question:\n{question}")
+# Prompt template
+prompt = ChatPromptTemplate.from_template(
+    "You are a helpful AI assistant. Answer the question clearly:\n{question}"
+)
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a friendly travel guide."),
+    ("human", "Suggest 3 must-visit places in {city}.")
+])
 
 @app.post("/ask")
 async def ask(request: QueryRequest):
-    chain = prompt | llm
-    response = chain.invoke({"question": request.query})
-    return {"answer": response.content}
+    try:
+        chain = prompt | chatbot
+        response = chain.invoke({"question": request.query})
+        return {"answer": response.content}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# Request schema for llm
+class TextRequest(BaseModel):
+    text: str
+
+# Initialize LLM (not chat)
+llm = GoogleGenerativeAI(
+    model="gemini-1.5-flash",
+    google_api_key=os.getenv("GEMINI_API_KEY")
+)
+
+@app.post("/summarize")
+def summarize_text(request: TextRequest):
+    prompt = f"Summarize the following text in 3-4 sentences:\n\n{request.text}"
+    response = llm.invoke(prompt)
+    return {"summary": response}
